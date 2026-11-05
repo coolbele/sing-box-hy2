@@ -1,16 +1,16 @@
-name: Build Minimal and Compressed Sing-Box
+name: Build Sing-Box for 360V6 (arm64)
 
 on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (例如: v1.11.3-min)'
+        description: 'Release Tag (例如: v1.11.3-360v6)'
         required: true
-        default: 'v1.11.3-min'
+        default: 'v1.11.3-360v6'
 
 jobs:
   build-compressed:
-    name: Build Ultra-Small Sing-Box
+    name: Build Ultra-Small Sing-Box for arm64
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -32,48 +32,35 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y upx-ucl
 
-      - name: Build and Compress (Linux AMD64 / ARM64)
+      - name: Build and Compress for 360V6 (ARM64)
         run: |
           mkdir -p build_output
 
-          # ---------------------------------------------------------
-          # 如果你的路由器是 x86_64 (AMD64)，保留这段：
-          # ---------------------------------------------------------
-          echo "Building for Linux amd64..."
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -trimpath \
+          echo "Building for Linux arm64 (360V6)..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -v -trimpath \
             -tags "with_quic,with_utls,with_hysteria,with_tuic" \
             -ldflags "-s -w -buildid=" \
-            -o build_output/sing-box-amd64 ./cmd/sing-box
+            -o build_output/sing-box ./cmd/sing-box
           
-          # 使用 UPX 进行终极极限压缩（减小二进制磁盘体积）
-          upx --best --lzma build_output/sing-box-amd64
+          # 使用 UPX 进行终极极限压缩，大幅减小体积以适应路由器闪存
+          upx --best --lzma build_output/sing-box
 
-          # ---------------------------------------------------------
-          # 如果你的路由器是 ARM64 (如 armv8 / N1盒子 / 各种Armbian盒子)，取消下面几行的注释：
-          # ---------------------------------------------------------
-          # echo "Building for Linux arm64..."
-          # CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -v -trimpath \
-          #   -tags "with_quic,with_utls,with_hysteria,with_tuic" \
-          #   -ldflags "-s -w -buildid=" \
-          #   -o build_output/sing-box-arm64 ./cmd/sing-box
-          # upx --best --lzma build_output/sing-box-arm64
-
-          # 打包成压缩包方便下载
+          # 打包成 tar.gz 压缩包
           cd build_output
-          tar -czvf "sing-box-${{ github.event.inputs.tag_name }}-linux-amd64.tar.gz" sing-box-amd64
-          # 如果编译了 arm64，也打包一个：
-          # tar -czvf "sing-box-${{ github.event.inputs.tag_name }}-linux-arm64.tar.gz" sing-box-arm64
+          tar -czvf "sing-box-${{ github.event.inputs.tag_name }}-linux-arm64.tar.gz" sing-box
+          ls -lh
           cd ..
 
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name }}
-          name: Sing-Box Ultra-Light (${{ github.event.inputs.tag_name }})
+          name: Sing-Box 360V6 Ultra-Light (${{ github.event.inputs.tag_name }})
           body: |
-            Ultra-compressed minimal build of **Sing-Box v1.11.3** for routers.
+            Ultra-compressed minimal build of **Sing-Box v1.11.3** for 360V6 (ARM64).
+            - Architecture: **linux-arm64**
             - Protocols: **Hysteria 2**, **TUIC** only.
-            - Stripped symbols (`-s -w`) & packed with **UPX `--best --lzma`** for minimum file size.
+            - Stripped symbols & packed with **UPX `--best --lzma`**.
           files: build_output/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
