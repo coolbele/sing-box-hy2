@@ -1,0 +1,66 @@
+name: Build and Release Sing-Box
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v1.12.0-custom)'
+        required: true
+        default: 'v1.12.0-custom'
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # 需要写入权限以创建 Release 和上传附件
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          repository: SagerNet/sing-box
+          ref: v1.12.0 # 可根据需要修改官方版本标签
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build Custom Sing-Box
+        run: |
+          mkdir -p build_output
+          
+          # 1. 编译 Linux amd64 (例如软路由 x86)
+          echo "Building for Linux amd64..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -trimpath \
+            -tags "with_quic,with_utls,with_hysteria,with_tuic" \
+            -ldflags "-s -w -buildid=" \
+            -o build_output/sing-box-linux-amd64 ./cmd/sing-box
+
+          # 2. 如果你还需要 arm64 (例如 armv8 软路由/N1盒平等)，取消下面几行的注释：
+          # echo "Building for Linux arm64..."
+          # CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -v -trimpath \
+          #   -tags "with_quic,with_utls,with_hysteria,with_tuic" \
+          #   -ldflags "-s -w -buildid=" \
+          #   -o build_output/sing-box-linux-arm64 ./cmd/sing-box
+
+          # 压缩成 tar.gz 方便发布
+          cd build_output
+          tar -czf sing-box-${{ github.event.inputs.tag_name }}-linux-amd64.tar.gz sing-box-linux-amd64
+          # 如果编译了 arm64，也压缩一个：
+          # tar -czf sing-box-${{ github.event.inputs.tag_name }}-linux-arm64.tar.gz sing-box-linux-arm64
+          cd ..
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name }}
+          name: Sing-Box Custom (${{ github.event.inputs.tag_name }})
+          body: |
+            Custom compiled Sing-Box with only **Hysteria 2** and **TUIC** protocols enabled.
+            - Trimmed unused protocols to reduce binary size.
+            - Built with `with_quic,with_utls,with_hysteria,with_tuic`.
+          files: build_output/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
