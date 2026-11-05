@@ -1,25 +1,25 @@
-name: Build and Release Sing-Box
+name: Build Minimal and Compressed Sing-Box
 
 on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v1.12.0-custom)'
+        description: 'Release Tag (例如: v1.11.3-min)'
         required: true
-        default: 'v1.12.0-custom'
+        default: 'v1.11.3-min'
 
 jobs:
-  build-and-release:
-    name: Build and Release
+  build-compressed:
+    name: Build Ultra-Small Sing-Box
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 需要写入权限以创建 Release 和上传附件
+      contents: write
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
         with:
           repository: SagerNet/sing-box
-          ref: v1.12.0 # 可根据需要修改官方版本标签
+          ref: v1.11.3
           fetch-depth: 1
 
       - name: Set up Go
@@ -27,40 +27,53 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Build Custom Sing-Box
+      - name: Install UPX Packer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y upx-ucl
+
+      - name: Build and Compress (Linux AMD64 / ARM64)
         run: |
           mkdir -p build_output
-          
-          # 1. 编译 Linux amd64 (例如软路由 x86)
+
+          # ---------------------------------------------------------
+          # 如果你的路由器是 x86_64 (AMD64)，保留这段：
+          # ---------------------------------------------------------
           echo "Building for Linux amd64..."
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -trimpath \
             -tags "with_quic,with_utls,with_hysteria,with_tuic" \
             -ldflags "-s -w -buildid=" \
-            -o build_output/sing-box-linux-amd64 ./cmd/sing-box
+            -o build_output/sing-box-amd64 ./cmd/sing-box
+          
+          # 使用 UPX 进行终极极限压缩（减小二进制磁盘体积）
+          upx --best --lzma build_output/sing-box-amd64
 
-          # 2. 如果你还需要 arm64 (例如 armv8 软路由/N1盒平等)，取消下面几行的注释：
+          # ---------------------------------------------------------
+          # 如果你的路由器是 ARM64 (如 armv8 / N1盒子 / 各种Armbian盒子)，取消下面几行的注释：
+          # ---------------------------------------------------------
           # echo "Building for Linux arm64..."
           # CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -v -trimpath \
           #   -tags "with_quic,with_utls,with_hysteria,with_tuic" \
           #   -ldflags "-s -w -buildid=" \
-          #   -o build_output/sing-box-linux-arm64 ./cmd/sing-box
+          #   -o build_output/sing-box-arm64 ./cmd/sing-box
+          # upx --best --lzma build_output/sing-box-arm64
 
-          # 压缩成 tar.gz 方便发布
+          # 打包成压缩包方便下载
           cd build_output
-          tar -czf sing-box-${{ github.event.inputs.tag_name }}-linux-amd64.tar.gz sing-box-linux-amd64
-          # 如果编译了 arm64，也压缩一个：
-          # tar -czf sing-box-${{ github.event.inputs.tag_name }}-linux-arm64.tar.gz sing-box-linux-arm64
+          tar -czvf "sing-box-${{ github.event.inputs.tag_name }}-linux-amd64.tar.gz" sing-box-amd64
+          # 如果编译了 arm64，也打包一个：
+          # tar -czvf "sing-box-${{ github.event.inputs.tag_name }}-linux-arm64.tar.gz" sing-box-arm64
           cd ..
 
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name }}
-          name: Sing-Box Custom (${{ github.event.inputs.tag_name }})
+          name: Sing-Box Ultra-Light (${{ github.event.inputs.tag_name }})
           body: |
-            Custom compiled Sing-Box with only **Hysteria 2** and **TUIC** protocols enabled.
-            - Trimmed unused protocols to reduce binary size.
-            - Built with `with_quic,with_utls,with_hysteria,with_tuic`.
+            Ultra-compressed minimal build of **Sing-Box v1.11.3** for routers.
+            - Protocols: **Hysteria 2**, **TUIC** only.
+            - Stripped symbols (`-s -w`) & packed with **UPX `--best --lzma`** for minimum file size.
           files: build_output/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
