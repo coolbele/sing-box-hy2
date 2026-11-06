@@ -1,16 +1,16 @@
-name: Build Sing-Box for 360V6 (arm64)
+name: Build Sing-Box v1.10.1 for 360V6 (arm64)
 
 on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (例如: v1.11.3-360v6)'
+        description: 'Release Tag (例如: v1.10.1-360v6)'
         required: true
-        default: 'v1.11.3-360v6'
+        default: 'v1.10.1-360v6'
 
 jobs:
-  build-compressed:
-    name: Build Ultra-Small Sing-Box for arm64
+  build-standard:
+    name: Build Sing-Box v1.10.1 arm64
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: SagerNet/sing-box
-          ref: v1.10.0
+          ref: v1.10.1
           fetch-depth: 1
 
       - name: Set up Go
@@ -27,24 +27,16 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Install UPX Packer
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y upx-ucl
-
-      - name: Build and Compress for 360V6 (ARM64)
+      - name: Build for 360V6 (ARM64) without UPX
         run: |
           mkdir -p build_output
 
-          echo "Building for Linux arm64 (360V6)..."
+          echo "Building sing-box v1.10.1 for Linux arm64 (360V6)..."
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -v -trimpath \
             -tags "with_quic,with_utls,with_hysteria,with_tuic" \
             -ldflags "-s -w -buildid=" \
             -o build_output/sing-box ./cmd/sing-box
           
-          # 使用 UPX 进行终极极限压缩，大幅减小体积以适应路由器闪存
-          upx --best --lzma build_output/sing-box
-
           # 打包成 tar.gz 压缩包
           cd build_output
           tar -czvf "sing-box-${{ github.event.inputs.tag_name }}-linux-arm64.tar.gz" sing-box
@@ -55,12 +47,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name }}
-          name: Sing-Box 360V6 Ultra-Light (${{ github.event.inputs.tag_name }})
+          name: Sing-Box v1.10.1 360V6 (${{ github.event.inputs.tag_name }})
           body: |
-            Ultra-compressed minimal build of **Sing-Box v1.11.3** for 360V6 (ARM64).
+            Clean minimal build of **Sing-Box v1.10.1** for 360V6 (ARM64 / IPQ6000).
             - Architecture: **linux-arm64**
             - Protocols: **Hysteria 2**, **TUIC** only.
-            - Stripped symbols & packed with **UPX `--best --lzma`**.
+            - Stripped symbols (`-s -w`), no UPX packing for maximum stability.
           files: build_output/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
